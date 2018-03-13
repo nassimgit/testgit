@@ -1,0 +1,56 @@
+import org.apache.spark.sql.SaveMode
+val host = "dev01.iris-data.cabestan.com"
+val port = "8020"
+val crm_url = s"hdfs://$host:$port/dev/working/vtech/crm2/accepted"
+val url_consolidated_gsm =s"hdfs://$host:$port/dev/working/vtech/phoneGsm/consolidated"
+
+------------------
+
+import org.apache.spark.sql.types._
+
+val crmDF = spark
+                      .read
+                      .format("com.databricks.spark.avro")
+                      .load(crm_url)
+
+//val allCols = crmDF.columns //TODO : filter to keep Id_CRM
+
+
+val existingColName = crmDF.schema.fields.map(_.name).toList
+//val existingCol: List[Column] = existingColName.map(col)
+    
+val gsmDF = crmDF
+                    .withColumn("pdcId", concat(lit("profile_"),crmDF("Liste_GSM")))
+                    .withColumn("context", concat(lit("profile")))
+                    .withColumn("label", lit("Primary"))
+                    .withColumn("value", crmDF("Liste_GSM"))
+                    .withColumn("score", lit(1))
+                    .withColumn("country", lit("France"))
+                    .withColumn("countryCode", lit("FR"))
+                    .withColumn("optoutFromGroup", lit(false))
+                    .withColumn("optoutFromPartner", lit(false))
+                    .withColumn("profileId", crmDF("ID_CRM"))
+                    .drop(existingColName: _*)
+gsmDF.printSchema
+z.show(gsmDF.limit(5))
+/*
+
+-----------------------------------------------
+
+val aggrgsmDF =    gsmDF
+                        .select("*")
+                        .groupBy($"profileId")
+                        .agg(
+                              collect_list(
+                                struct("pdcId","context","label","value","score","country","countryCode","optoutFromGroup","optoutFromPartner")
+                            ) as "gsm"
+                )
+//show(deftest)
+aggrgsmDF.printSchema
+z.show(aggrgsmDF.limit(3))
+
+
+---------------------------
+
+import org.apache.spark.sql.SaveMode
+aggrgsmDF.write.mode(SaveMode.Overwrite).parquet(url_consolidated_gsm)
