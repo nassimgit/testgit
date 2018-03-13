@@ -1,0 +1,136 @@
+{
+  "size": 0,
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "terms": { "Liste_DEPARTEMENT": ["75","92"]}
+        },
+        {
+          "term": {
+            "Liste_PAYS": "FR"
+          }
+        },
+        {
+          "range": {
+            "Liste_DATENAISSANCE": {
+              "gte": "now-30y/y",
+              "lt": "now-20y/y"
+            }
+          }
+        },
+        {
+          "nested": {
+            "path": "ciblage",
+            "filter": {
+              "bool": {
+                "must": [
+                  {
+                    "range": {
+                      "ciblage.Archivage_CreationDate": {
+                        "gte": "now-4M/M",
+                        "lt": "now-3M/M"
+                      }
+                    }
+                  },
+                  {
+                    "term": {
+                      "ciblage.statutComportement": "1"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "must_not": [
+        {
+          "term": {
+            "Liste_Bounced": true
+          }
+        }
+      ],
+      "should": [
+        {
+          "nested": {
+            "path": "transaction",
+            "filter": {
+              "bool": {
+                "must": [
+                  {
+                    "range": {
+                      "transaction.PURCHASE_TTC": {
+                        "gte": 10
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "has_child": {
+            "type": "nav",
+            "query": {
+              "bool": {
+                "must": [
+                  {
+                    "term": {
+                      "spageMD5": "59ac9c8b243af0af7845b49af1739194"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "ciblages_per_crm": {
+      "terms": {
+        "field": "Liste_Id",
+        "size": "40000000"
+      },
+      "aggs": {
+        "ciblages": {
+          "nested": {
+            "path": "ciblage"
+          },
+          "aggs": {
+            "selection": {
+              "filter": {
+                "range": {
+                  "ciblage.Archivage_CreationDate": {
+                    "gte": "now-4M/M",
+                    "lt": "now-3M/M"
+                  }
+                }
+              },
+              "aggs": {
+                "count": {
+                  "value_count": {
+                    "field": "ciblage.Action_Id"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "filter_bucket": {
+          "bucket_selector": {
+            "buckets_path": {
+              "count": "ciblages>selection>count"
+            },
+            "script": {
+              "inline": "count > 4"
+            }
+          }
+        }
+      }
+    }
+  }
+}
